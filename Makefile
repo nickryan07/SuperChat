@@ -1,5 +1,5 @@
-CXXFLAGS= -Wall -g -O0 -std=c++11
-LDFLAGS =  -lboost_system -lpthread
+CXXFLAGS= -g -Wall -Wextra -O0 -std=c++11
+LDLIBS =  -lboost_system -lpthread
 
 EXECUTABLES = chat_client chat_server
 
