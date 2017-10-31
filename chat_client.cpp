@@ -135,7 +135,7 @@ int main(int argc, char* argv[])
 
     std::thread t([&io_service](){ io_service.run(); });
 
-    char line[chat_message::max_body_length + 1];
+    char line[chat_message::max_body_length + 1];    /*holds written text*/
     while (std::cin.getline(line, chat_message::max_body_length + 1))
     {
       chat_message msg;
