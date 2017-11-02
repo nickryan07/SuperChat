@@ -12,6 +12,8 @@
 #include <deque>
 #include <iostream>
 #include <list>
+#include <string>
+#include <vector>
 #include <memory>
 #include <set>
 #include <utility>
@@ -40,6 +42,7 @@ typedef std::shared_ptr<chat_participant> chat_participant_ptr;
 class chat_room
 {
 public:
+  chat_room(const char* nm) : name{nm} { };
   void join(chat_participant_ptr participant)
   {
     participants_.insert(participant);
@@ -61,8 +64,12 @@ public:
     for (auto participant: participants_)
       participant->deliver(msg);
   }
+  std::string get_name() {
+    return name;
+  }
 
 private:
+  std::string name;
   std::set<chat_participant_ptr> participants_;
   enum { max_recent_msgs = 100 };
   chat_message_queue recent_msgs_;
@@ -107,6 +114,7 @@ private:
         {
           if (!ec && read_msg_.decode_header())
           {
+            //std::cout << read_msg_.data() << std::endl;
             do_read_body();
           }
           else
@@ -125,6 +133,13 @@ private:
         {
           if (!ec)
           {
+            //std::cout << read_msg_.body() << std::endl;
+            /*char* token;
+            char* temp = read_msg_.body();
+            token = strtok(temp, " ");
+            if(strcmp(token, "NAMECHATROOM") == 0) {
+              std::cout << room_.get_name() << std::endl;
+            }*/
             room_.deliver(read_msg_);
             do_read_header();
           }
@@ -194,7 +209,10 @@ private:
 
   tcp::acceptor acceptor_;
   tcp::socket socket_;
-  chat_room room_;
+  chat_room room_ {"Main"};
+  std::map<std::string, chat_room> rooms_ {
+    {"Main", room_}
+  };
 };
 
 //----------------------------------------------------------------------
