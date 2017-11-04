@@ -17,8 +17,11 @@
 #include <memory>
 #include <set>
 #include <utility>
+#include <boost/algorithm/string.hpp>
+#include <string>
 #include <boost/asio.hpp>
 #include "chat_message.hpp"
+#include "util.hpp"
 
 using boost::asio::ip::tcp;
 
@@ -33,9 +36,28 @@ class chat_participant
 public:
   virtual ~chat_participant() {}
   virtual void deliver(const chat_message& msg) = 0;
+  void set_uuid(std::string str) {
+    uuid = str;
+  }
+  void set_name(std::string str) {
+    name = str;
+  }
+  std::string get_uuid() {
+    return uuid;
+  }
+  std::string get_name() {
+    return name;
+  }
+private:
+  std::string name;
+  std::string uuid;
+  std::string room = "";
 };
 
 typedef std::shared_ptr<chat_participant> chat_participant_ptr;
+
+//----------------------------------------------------------------------
+
 
 //----------------------------------------------------------------------
 
@@ -55,6 +77,10 @@ public:
     participants_.erase(participant);
   }
 
+  void create_room(std::string room_name) {
+    sub_rooms.push_back(room_name);
+  }
+
   void deliver(const chat_message& msg)
   {
     recent_msgs_.push_back(msg);
@@ -64,13 +90,25 @@ public:
     for (auto participant: participants_)
       participant->deliver(msg);
   }
+  void reply(chat_participant_ptr part, const chat_message& msg) {
+    part->deliver(msg);
+  }
+  bool check_name(chat_participant_ptr part, std::string name_to_check) {
+    for (auto part: participants_) {
+      if(part->get_name() == name_to_check) {
+        return true;
+      }
+    }
+    return false;
+  }
   std::string get_name() {
     return name;
   }
 
 private:
   std::string name;
-  std::set<chat_participant_ptr> participants_;
+  std::set<chat_participant_ptr>  participants_;
+  std::vector<std::string> sub_rooms;
   enum { max_recent_msgs = 100 };
   chat_message_queue recent_msgs_;
 };
@@ -127,20 +165,41 @@ private:
   void do_read_body()
   {
     auto self(shared_from_this());
-    boost::asio::async_read(socket_,
-        boost::asio::buffer(read_msg_.body(), read_msg_.body_length()),
+    boost::asio::async_read(socket_, boost::asio::buffer(read_msg_.body(), read_msg_.body_length()),
         [this, self](boost::system::error_code ec, std::size_t /*length*/)
         {
           if (!ec)
           {
-            //std::cout << read_msg_.body() << std::endl;
-            /*char* token;
-            char* temp = read_msg_.body();
-            token = strtok(temp, " ");
-            if(strcmp(token, "NAMECHATROOM") == 0) {
-              std::cout << room_.get_name() << std::endl;
-            }*/
-            room_.deliver(read_msg_);
+            std::string read_line = std::string(read_msg_.body()).substr(0, read_msg_.body_length());
+            std::cout << read_line << std::endl;
+            if(read_line.find("<MYUUID>") != std::string::npos) {
+              std::cout << shared_from_this()->get_uuid() << std::endl;
+            } else if(read_line.find("<REQUUID>") != std::string::npos) {
+              std::string s = gen_uuid();
+              shared_from_this()->set_uuid(s);
+              std::cout << shared_from_this()->get_uuid() << std::endl;
+              char response[chat_message::max_body_length + 1];
+              std::strcpy(response, s.c_str());
+              chat_message res;
+              res.body_length(std::strlen(response));
+              std::memcpy(res.body(), response, res.body_length());
+              res.encode_header();
+              room_.reply(shared_from_this(), res);
+            } else if(read_line.find("<NICK>") != std::string::npos) {
+              std::vector<std::string> strs;
+              boost::split(strs, read_line, boost::is_any_of("<>"));
+              for(int i = 0; i < strs.size(); i++) {
+                if(strs[i] == "") {
+                  strs.erase(strs.begin()+i);
+                }
+              }
+              if(!room_.check_name(shared_from_this(), strs[strs.size()-1])) {
+                shared_from_this()->set_name(strs[strs.size()-1]);
+                std::cout << shared_from_this()->get_uuid() << ": " << shared_from_this()->get_name() << std::endl;
+              }
+            } else {
+              room_.deliver(read_msg_);
+            }
             do_read_header();
           }
           else

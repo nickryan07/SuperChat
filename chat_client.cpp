@@ -2,8 +2,10 @@
 #include <deque>
 #include <iostream>
 #include <thread>
+#include <iomanip>
 #include <boost/asio.hpp>
 #include "chat_message.hpp"
+#include "util.hpp"
 
 using boost::asio::ip::tcp;
 
@@ -134,10 +136,30 @@ int main(int argc, char* argv[])
     chat_client c(io_service, endpoint_iterator);
 
     std::thread t([&io_service](){ io_service.run(); });
-
-    char line[chat_message::max_body_length + 1];    /*holds written text*/
-    while (std::cin.getline(line, chat_message::max_body_length + 1))
+    chat_message uuid_req;
+    time_t tm = time(NULL);
+    char cmd[chat_message::max_body_length + 1];
+    char req[chat_message::max_body_length + 1];
+    sprintf(cmd, "<%10d>", tm);
+    strcat(cmd, "<REQUUID>");
+    unsigned int chcksm = gen_crc32(std::string(cmd));
+    std::stringstream sstream;
+    sstream << "<" << std::hex << chcksm << ">";
+    std::string result = sstream.str();
+    strcpy(req, result.c_str());
+    strcat(req, cmd);
+    //std::cout << cmd << std::endl;
+    uuid_req.body_length(std::strlen(req));
+    std::memcpy(uuid_req.body(), req, uuid_req.body_length());
+    uuid_req.encode_header();
+    c.write(uuid_req);
+    std::string mess;
+    while (getline(std::cin, mess))
     {
+      char line[chat_message::max_body_length + 1] = {0};
+      std::strcpy(line, mess.c_str());
+      //TODO : Need to disable the user from sending messages that contain
+      // commands such as <REQUUID> or <NICK> in the body of their message.
       chat_message msg;
       msg.body_length(std::strlen(line));
       std::memcpy(msg.body(), line, msg.body_length());
