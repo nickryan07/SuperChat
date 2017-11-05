@@ -137,7 +137,7 @@ int main(int argc, char* argv[])
 
     std::thread t([&io_service](){ io_service.run(); });
     chat_message uuid_req;
-    time_t tm = time(NULL);
+    /*time_t tm = time(NULL);
     char cmd[chat_message::max_body_length + 1];
     char req[chat_message::max_body_length + 1];
     sprintf(cmd, "<%10d>", tm);
@@ -147,7 +147,9 @@ int main(int argc, char* argv[])
     sstream << "<" << std::hex << chcksm << ">";
     std::string result = sstream.str();
     strcpy(req, result.c_str());
-    strcat(req, cmd);
+    strcat(req, cmd);*/
+    char req[chat_message::max_body_length + 1];
+    strcpy(req, format_request("REQUUID").c_str());
     //std::cout << cmd << std::endl;
     uuid_req.body_length(std::strlen(req));
     std::memcpy(uuid_req.body(), req, uuid_req.body_length());
@@ -157,7 +159,8 @@ int main(int argc, char* argv[])
     while (getline(std::cin, mess))
     {
       char line[chat_message::max_body_length + 1] = {0};
-      std::strcpy(line, mess.c_str());
+      std::strcpy(line, format_request(mess).c_str());
+
       //TODO : Need to disable the user from sending messages that contain
       // commands such as <REQUUID> or <NICK> in the body of their message.
       chat_message msg;

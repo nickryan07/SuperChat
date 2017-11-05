@@ -48,6 +48,13 @@ public:
   std::string get_name() {
     return name;
   }
+  std::string get_room() {
+    return room;
+  }
+  void set_room(std::string str) {
+    room = str;
+    std::cout << uuid << " joined: " << room << std::endl;
+  }
 private:
   std::string name;
   std::string uuid;
@@ -78,7 +85,24 @@ public:
   }
 
   void create_room(std::string room_name) {
-    sub_rooms.push_back(room_name);
+    std::vector<std::string> empty_vector;
+    sub_rooms[room_name].swap(empty_vector);
+    std::cout << room_name << ": created" << std::endl;
+  }
+
+  bool check_room(std::string name_to_check) {
+    if (sub_rooms.find(name_to_check) != sub_rooms.end()) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  void join_room(chat_participant_ptr part, std::string name_to_check) {
+    if(check_room(name_to_check)) {
+      part->set_room(name_to_check);
+      sub_rooms[name_to_check].push_back(part->get_uuid());
+    }
   }
 
   void deliver(const chat_message& msg)
@@ -108,7 +132,7 @@ public:
 private:
   std::string name;
   std::set<chat_participant_ptr>  participants_;
-  std::vector<std::string> sub_rooms;
+  std::map<std::string, std::vector<std::string>> sub_rooms;
   enum { max_recent_msgs = 100 };
   chat_message_queue recent_msgs_;
 };
@@ -172,9 +196,16 @@ private:
           {
             std::string read_line = std::string(read_msg_.body()).substr(0, read_msg_.body_length());
             std::cout << read_line << std::endl;
-            if(read_line.find("<MYUUID>") != std::string::npos) {
+            std::vector<std::string> strs;
+            boost::split(strs, read_line, boost::is_any_of(" "));
+            for(int i = 0; i < strs.size(); i++) {
+              if(strs[i] == "") {
+                strs.erase(strs.begin()+i);
+              }
+            }
+            if(strs[2] == "MYUUID") {//if(read_line.find("<MYUUID>") != std::string::npos) {
               std::cout << shared_from_this()->get_uuid() << std::endl;
-            } else if(read_line.find("<REQUUID>") != std::string::npos) {
+            } else if(strs[2] == "REQUUID") {//if(read_line.find("<REQUUID>") != std::string::npos) {
               std::string s = gen_uuid();
               shared_from_this()->set_uuid(s);
               std::cout << shared_from_this()->get_uuid() << std::endl;
@@ -185,20 +216,50 @@ private:
               std::memcpy(res.body(), response, res.body_length());
               res.encode_header();
               room_.reply(shared_from_this(), res);
-            } else if(read_line.find("<NICK>") != std::string::npos) {
-              std::vector<std::string> strs;
-              boost::split(strs, read_line, boost::is_any_of("<>"));
-              for(int i = 0; i < strs.size(); i++) {
-                if(strs[i] == "") {
-                  strs.erase(strs.begin()+i);
-                }
-              }
+            } else if(strs[2] == "NICK") {//if(read_line.find("<NICK>") != std::string::npos) {
               if(!room_.check_name(shared_from_this(), strs[strs.size()-1])) {
                 shared_from_this()->set_name(strs[strs.size()-1]);
                 std::cout << shared_from_this()->get_uuid() << ": " << shared_from_this()->get_name() << std::endl;
               }
-            } else {
-              room_.deliver(read_msg_);
+            } else if(strs[2] == "SENDTEXT") {
+              if(shared_from_this()->get_room() != "") {
+                std::string m;
+                for(int j = 3; j < strs.size(); j++) {
+                  m += (strs[j]);
+                  if(j != strs.size()-1) {
+                    m += " ";
+                  }
+                }
+                char response[chat_message::max_body_length + 1];
+                std::strcpy(response, m.c_str());
+                chat_message res;
+                res.body_length(std::strlen(response));
+                std::memcpy(res.body(), response, res.body_length());
+                res.encode_header();
+                room_.deliver(res); // Need to heavily modify
+              }
+            } else if(strs[2] == "NAMECHATROOM") {//if(read_line.find("<NICK>") != std::string::npos) {
+              std::string m;
+              for(int j = 3; j < strs.size(); j++) {
+                m += (strs[j]);
+                if(j != strs.size()-1) {
+                  m += " ";
+                }
+              }
+              if(!room_.check_room(m)) {
+                room_.create_room(m);
+              }
+            } else if(strs[2] == "JOINCHATROOM") {//if(read_line.find("<NICK>") != std::string::npos) {
+              std::string m;
+              for(int j = 3; j < strs.size(); j++) {
+                m += (strs[j]);
+                if(j != strs.size()-1) {
+                  m += " ";
+                }
+              }
+              if(room_.check_room(m)) {
+                room_.join_room(shared_from_this(), m);
+              }
             }
             do_read_header();
           }
