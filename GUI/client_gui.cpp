@@ -14,6 +14,7 @@
 #include <FL/Fl_Button.H>
 #include <FL/Fl_Text_Display.H>
 
+
 /*window (width,height,name*/
 Fl_Window win   (832, 539, "UberChat");
 /*
@@ -21,11 +22,16 @@ Fl_Window win   (832, 539, "UberChat");
   0,0 is upper left hand corner
 */
 Fl_Input input1 (85, 500, 600, 20, "Message:");
-Fl_Button quit  (700, 500, 70,20,"Enter");
+
+Fl_Output *currentRoom = new Fl_Output(340,40,200,28,"Current Chatroom"); 
+
+Fl_Button quit  (700, 500, 80,20,"Enter");
 //Fl_Button clear (80, 275, 50,20,"Clear");
 
+
+
 Fl_Text_Buffer *buff = new Fl_Text_Buffer ();
-Fl_Text_Display *disp = new Fl_Text_Display (10,80,800,400,"");
+Fl_Text_Display *disp = new Fl_Text_Display (10,80,800,400);
 
 // boost asio instances
 chat_client *c = NULL;
@@ -91,7 +97,8 @@ static void cb_input1 (Fl_Input*, void * userdata)
 
 int main ( int argc, char **argv) 
 {
-
+     
+  currentRoom->align(FL_ALIGN_TOP);    /*put label at top of widget*/
   win.begin ();
     win.add (input1);
     input1.callback ((Fl_Callback*)cb_input1,( void *) "Enter next:");
