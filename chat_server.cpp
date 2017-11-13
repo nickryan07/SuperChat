@@ -58,7 +58,7 @@ public:
 private:
   std::string name;
   std::string uuid;
-  std::string room = "";
+  std::string room = "the lobby";
 };
 
 typedef std::shared_ptr<chat_participant> chat_participant_ptr;
@@ -109,6 +109,11 @@ public:
     }
   }
 
+  void update_messages(chat_participant_ptr part) {
+    for (auto msg: msg_queue_[part->get_name()])
+      part->deliver(msg);
+  }
+
   void deliver(chat_participant_ptr part, const chat_message& msg)
   {
     std::string rm = part->get_room();
@@ -122,6 +127,22 @@ public:
   }
   void reply(chat_participant_ptr part, const chat_message& msg) {
     part->deliver(msg);
+  }
+  std::string list_users(chat_participant_ptr partic) {
+    std::string list;
+    for (auto part: participants_) {
+      if(partic->get_room() == part->get_room()) {
+        list += (part->get_uuid()+ "," + part->get_name() + ";");
+      }
+    }
+    return list;
+  }
+  std::string list_rooms() {
+    std::string list;
+    for (const auto &str : sub_rooms ) {
+      list += (str.first+";");
+    }
+    return list;
   }
   bool check_name(chat_participant_ptr part, std::string name_to_check) {
     for (auto part: participants_) {
@@ -202,18 +223,17 @@ private:
             std::string read_line = std::string(read_msg_.body()).substr(0, read_msg_.body_length());
             std::cout << read_line << std::endl;
             std::vector<std::string> strs;
-            boost::split(strs, read_line, boost::is_any_of(" "));
+            boost::split(strs, read_line, boost::is_any_of(", "));
             for(int i = 0; i < strs.size(); i++) {
               if(strs[i] == "") {
                 strs.erase(strs.begin()+i);
               }
             }
-            if(strs[2] == "MYUUID") {//if(read_line.find("<MYUUID>") != std::string::npos) {
+            if(strs[2] == "MYUUID") {
               std::cout << shared_from_this()->get_uuid() << std::endl;
-            } else if(strs[2] == "REQUUID") {//if(read_line.find("<REQUUID>") != std::string::npos) {
-              std::string s = gen_uuid();
-              shared_from_this()->set_uuid(s);
-              std::cout << shared_from_this()->get_uuid() << std::endl;
+            } else if(strs[2] == "REQCHATROOM") {
+              std::string s = shared_from_this()->get_room();
+              s = format_request("REQCHATROOM", s);
               char response[chat_message::max_body_length + 1];
               std::strcpy(response, s.c_str());
               chat_message res;
@@ -221,10 +241,39 @@ private:
               std::memcpy(res.body(), response, res.body_length());
               res.encode_header();
               room_.reply(shared_from_this(), res);
-            } else if(strs[2] == "NICK") {//if(read_line.find("<NICK>") != std::string::npos) {
-              if(!room_.check_name(shared_from_this(), strs[strs.size()-1])) {
-                shared_from_this()->set_name(strs[strs.size()-1]);
-                std::cout << shared_from_this()->get_uuid() << ": " << shared_from_this()->get_name() << std::endl;
+            } else if(strs[2] == "REQUUID") {
+              std::string s = gen_uuid();
+              shared_from_this()->set_uuid(s);
+              std::cout << shared_from_this()->get_uuid() << ": Connected" << std::endl;
+              char response[chat_message::max_body_length + 1];
+              s = format_request("REQUUID", s);
+              std::strcpy(response, s.c_str());
+              chat_message res;
+              res.body_length(std::strlen(response));
+              std::memcpy(res.body(), response, res.body_length());
+              res.encode_header();
+              room_.reply(shared_from_this(), res);
+            } else if(strs[2] == "NICK") {
+              std::string m;
+              for(int j = 3; j < strs.size(); j++) {
+                m += (strs[j]);
+                if(j != strs.size()-1) {
+                  m += " ";
+                }
+              }
+              if(!room_.check_name(shared_from_this(), m)) {
+                shared_from_this()->set_name(m);
+                char response[chat_message::max_body_length + 1];
+                std::string s = format_request("NICK", m);
+                std::strcpy(response, s.c_str());
+                chat_message res;
+                res.body_length(std::strlen(response));
+                std::memcpy(res.body(), response, res.body_length());
+                res.encode_header();
+                room_.reply(shared_from_this(), res);
+                //std::cout << shared_from_this()->get_uuid() << ": " << shared_from_this()->get_name() << std::endl;
+              } else {
+                //TODO: Modify to ensure uniqueness if necessary
               }
             } else if(strs[2] == "SENDTEXT") {
               if(shared_from_this()->get_room() != "") {
@@ -241,7 +290,7 @@ private:
                 res.body_length(std::strlen(response));
                 std::memcpy(res.body(), response, res.body_length());
                 res.encode_header();
-                room_.deliver(shared_from_this(), res); // Need to heavily modify
+                room_.deliver(shared_from_this(), res);
               }
             } else if(strs[2] == "NAMECHATROOM") {//if(read_line.find("<NICK>") != std::string::npos) {
               std::string m;
@@ -253,8 +302,16 @@ private:
               }
               if(!room_.check_room(m)) {
                 room_.create_room(m);
+                char response[chat_message::max_body_length + 1];
+                std::string s = format_request("NAMECHATROOM", m);
+                std::strcpy(response, s.c_str());
+                chat_message res;
+                res.body_length(std::strlen(response));
+                std::memcpy(res.body(), response, res.body_length());
+                res.encode_header();
+                room_.reply(shared_from_this(), res);
               }
-            } else if(strs[2] == "JOINCHATROOM") {//if(read_line.find("<NICK>") != std::string::npos) {
+            } else if(strs[2] == "CHANGECHATROOM") {//if(read_line.find("<NICK>") != std::string::npos) {
               std::string m;
               for(int j = 3; j < strs.size(); j++) {
                 m += (strs[j]);
@@ -264,7 +321,45 @@ private:
               }
               if(room_.check_room(m)) {
                 room_.join_room(shared_from_this(), m);
+                char response[chat_message::max_body_length + 1];
+                std::string s = format_request("CHANGECHATROOM", m);
+                std::strcpy(response, s.c_str());
+                chat_message res;
+                res.body_length(std::strlen(response));
+                std::memcpy(res.body(), response, res.body_length());
+                res.encode_header();
+                room_.reply(shared_from_this(), res);
               }
+            } else if(strs[2] == "REQUSERS") {
+              std::string users = room_.list_users(shared_from_this());
+              char response[chat_message::max_body_length + 1];
+              std::string s = format_request("REQUSERS", users);
+              std::strcpy(response, s.c_str());
+              chat_message res;
+              res.body_length(std::strlen(response));
+              std::memcpy(res.body(), response, res.body_length());
+              res.encode_header();
+              room_.reply(shared_from_this(), res);
+            } else if(strs[2] == "REQCHATROOMS") {
+              std::string rooms = room_.list_rooms();
+              char response[chat_message::max_body_length + 1];
+              std::string s = format_request("REQCHATROOMS", rooms);
+              std::strcpy(response, s.c_str());
+              chat_message res;
+              res.body_length(std::strlen(response));
+              std::memcpy(res.body(), response, res.body_length());
+              res.encode_header();
+              room_.reply(shared_from_this(), res);
+            } else if(strs[2] == "REQTEXT") {
+              room_.update_messages(shared_from_this());
+              char response[chat_message::max_body_length + 1];
+              std::string s = format_request("REQTEXT", rooms);
+              std::strcpy(response, s.c_str());
+              chat_message res;
+              res.body_length(std::strlen(response));
+              std::memcpy(res.body(), response, res.body_length());
+              res.encode_header();
+              room_.reply(shared_from_this(), res);
             }
             do_read_header();
           }
@@ -334,10 +429,7 @@ private:
 
   tcp::acceptor acceptor_;
   tcp::socket socket_;
-  chat_room room_ {"Main"};
-  std::map<std::string, chat_room> rooms_ {
-    {"Main", room_}
-  };
+  chat_room room_ {"the lobby"};
 };
 
 //----------------------------------------------------------------------
