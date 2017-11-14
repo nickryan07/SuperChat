@@ -95,8 +95,10 @@ std::string format_request(std::string command, std::string data) {
   strcat(cmd, tm.c_str());
   strcat(cmd, ",");
   strcat(cmd, command.c_str());
-  strcat(cmd, ",");
-  strcat(cmd, data.c_str());
+  if(data != "") {
+    strcat(cmd, ",");
+    strcat(cmd, data.c_str());
+  }
   unsigned int chcksm = gen_crc32(std::string(cmd));
   std::stringstream sstream;
   sstream << std::hex << chcksm << "";

@@ -71,7 +71,7 @@ typedef std::shared_ptr<chat_participant> chat_participant_ptr;
 class chat_room
 {
 public:
-  chat_room(const char* nm) : name{nm} { };
+  chat_room(const char* nm) : name{nm} { create_room(std::string(name)); };
   void join(chat_participant_ptr participant)
   {
     participants_.insert(participant);
@@ -180,6 +180,7 @@ public:
   void start()
   {
     room_.join(shared_from_this());
+    room_.join_room(shared_from_this(), "the lobby");
     do_read_header();
   }
 
@@ -353,7 +354,7 @@ private:
             } else if(strs[2] == "REQTEXT") {
               room_.update_messages(shared_from_this());
               char response[chat_message::max_body_length + 1];
-              std::string s = format_request("REQTEXT", rooms);
+              std::string s = format_request("REQTEXT", "");
               std::strcpy(response, s.c_str());
               chat_message res;
               res.body_length(std::strlen(response));
