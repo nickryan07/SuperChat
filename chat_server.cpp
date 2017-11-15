@@ -79,7 +79,9 @@ typedef std::shared_ptr<chat_participant> chat_participant_ptr;
 class chat_room
 {
 public:
-  chat_room(const char* nm) : name{nm} { };
+  chat_room(const char* nm) : name{nm} {
+    create_room(std::string(name));
+  };
   void join(chat_participant_ptr participant)
   {
     participants_.insert(participant);
@@ -208,6 +210,7 @@ public:
   void start()
   {
     room_.join(shared_from_this());
+    room_.join_room(shared_from_this(), "the lobby");
     do_read_header();
   }
 
