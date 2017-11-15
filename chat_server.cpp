@@ -27,7 +27,7 @@ using boost::asio::ip::tcp;
 
 //----------------------------------------------------------------------
 
-typedef std::deque<chat_message> chat_message_queue;
+typedef std::vector<chat_message> chat_message_queue;
 
 //----------------------------------------------------------------------
 
@@ -51,11 +51,19 @@ public:
   std::string get_room() {
     return room;
   }
+  void send_text(const chat_message& msg) {
+    sent_text.push_back(msg);
+  }
   void set_room(std::string str) {
     room = str;
+    sent_text.clear();//need to refrest the chat buffer when a new room is joined
     std::cout << uuid << " joined: " << room << std::endl;
   }
+  chat_message_queue get_sent() {
+    return sent_text;
+  }
 private:
+  chat_message_queue sent_text;
   std::string name;
   std::string uuid;
   std::string room = "the lobby";
@@ -109,17 +117,37 @@ public:
     }
   }
 
-  void update_messages(chat_participant_ptr part) {
-    for (auto msg: msg_queue_[part->get_name()])
-      part->deliver(msg);
+  std::string update_messages(chat_participant_ptr part) {
+    /*for (auto participant: participants_) {
+      for(auto msg: msg_queue_[part->get_room()]) {
+        if(part->get_room() == participant->get_room())
+          participant->deliver(msg);
+      }
+    }*/
+    std::string line = "";
+    std::string room = part->get_room();
+    if (part->get_sent().size() < msg_queue_[room].size()) {
+      std::cout << "GOT TO HERE\n";
+      int max = msg_queue_[room].size();
+      int start = part->get_sent().size();
+      for(int i = start; i < max; i++) {
+        //std::cout << "GOT TO HERE: " << i << std::endl;
+        //part->send_text(msg_queue_[room][i]);
+        //std::cout << "MSG: " << std::string(msg_queue_[room][i].body()) << std::endl;
+        line = line + std::string(msg_queue_[room][i].body()).substr(0, msg_queue_[room][i].body_length());
+        part->send_text(msg_queue_[room][i]);
+      }
+    }
+    std::cout << "MSG: " << line << std::endl;
+    return line;
   }
 
   void deliver(chat_participant_ptr part, const chat_message& msg)
   {
     std::string rm = part->get_room();
     msg_queue_[rm].push_back(msg);
-    while (msg_queue_[rm].size() > max_recent_msgs)
-      msg_queue_[rm].pop_front();
+    //while (msg_queue_[rm].size() > max_recent_msgs)
+    //  msg_queue_[rm].pop_front();
 
     for (auto participant: participants_)
       if(part->get_room() == participant->get_room())
@@ -275,6 +303,10 @@ private:
               } else {
                 //TODO: Modify to ensure uniqueness if necessary
               }
+              /**
+              * Need to create a new "message" that will actually be stored with the form:
+              * UUID MESSAGE
+              */
             } else if(strs[2] == "SENDTEXT") {
               if(shared_from_this()->get_room() != "") {
                 std::string m;
@@ -284,15 +316,25 @@ private:
                     m += " ";
                   }
                 }
+                char uuid_message[chat_message::max_body_length + 1];
+                std::strcpy(uuid_message, shared_from_this()->get_uuid().c_str());
+                std::strcat(uuid_message, " ");
+                std::strcat(uuid_message, m.c_str());
+                std::strcat(uuid_message, ";");
+                chat_message store_msg;
+                store_msg.body_length(std::strlen(uuid_message));
+                std::memcpy(store_msg.body(), uuid_message, store_msg.body_length());
+                store_msg.encode_header();
+                room_.deliver(shared_from_this(), store_msg);
                 char response[chat_message::max_body_length + 1];
                 std::strcpy(response, m.c_str());
                 chat_message res;
                 res.body_length(std::strlen(response));
                 std::memcpy(res.body(), response, res.body_length());
                 res.encode_header();
-                room_.deliver(shared_from_this(), res);
+                //room_.deliver(shared_from_this(), res);
               }
-            } else if(strs[2] == "NAMECHATROOM") {//if(read_line.find("<NICK>") != std::string::npos) {
+            } else if(strs[2] == "NAMECHATROOM") {
               std::string m;
               for(int j = 3; j < strs.size(); j++) {
                 m += (strs[j]);
@@ -311,7 +353,7 @@ private:
                 res.encode_header();
                 room_.reply(shared_from_this(), res);
               }
-            } else if(strs[2] == "CHANGECHATROOM") {//if(read_line.find("<NICK>") != std::string::npos) {
+            } else if(strs[2] == "CHANGECHATROOM") {
               std::string m;
               for(int j = 3; j < strs.size(); j++) {
                 m += (strs[j]);
@@ -341,9 +383,9 @@ private:
               res.encode_header();
               room_.reply(shared_from_this(), res);
             } else if(strs[2] == "REQCHATROOMS") {
-              std::string rooms = room_.list_rooms();
+              std::string rms = room_.list_rooms();
               char response[chat_message::max_body_length + 1];
-              std::string s = format_request("REQCHATROOMS", rooms);
+              std::string s = format_request("REQCHATROOMS", rms);
               std::strcpy(response, s.c_str());
               chat_message res;
               res.body_length(std::strlen(response));
@@ -351,9 +393,9 @@ private:
               res.encode_header();
               room_.reply(shared_from_this(), res);
             } else if(strs[2] == "REQTEXT") {
-              room_.update_messages(shared_from_this());
               char response[chat_message::max_body_length + 1];
-              std::string s = format_request("REQTEXT", rooms);
+              std::string data = room_.update_messages(shared_from_this());
+              std::string s = format_request("REQTEXT", data);
               std::strcpy(response, s.c_str());
               chat_message res;
               res.body_length(std::strlen(response));
@@ -380,7 +422,7 @@ private:
         {
           if (!ec)
           {
-            write_msgs_.pop_front();
+            write_msgs_.erase(write_msgs_.begin());
             if (!write_msgs_.empty())
             {
               do_write();

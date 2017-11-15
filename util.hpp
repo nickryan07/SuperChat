@@ -11,8 +11,12 @@
 
 #include "chat_message.hpp"
 
+#define DEBUG_MODE true
+#define CHECKSUM_VALIDATION false
+
 #define TRUE 1
 #define FALSE 0
+
 
 std::string gen_uuid() {
     boost::uuids::uuid uuid = boost::uuids::random_generator()();
@@ -95,8 +99,10 @@ std::string format_request(std::string command, std::string data) {
   strcat(cmd, tm.c_str());
   strcat(cmd, ",");
   strcat(cmd, command.c_str());
-  strcat(cmd, ",");
-  strcat(cmd, data.c_str());
+  if(data != "") {
+    strcat(cmd, ",");
+    strcat(cmd, data.c_str());
+  }
   unsigned int chcksm = gen_crc32(std::string(cmd));
   std::stringstream sstream;
   sstream << std::hex << chcksm << "";
