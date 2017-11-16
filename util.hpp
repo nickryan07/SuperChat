@@ -4,6 +4,7 @@
 #include <boost/uuid/uuid_generators.hpp> // generators
 #include <boost/uuid/uuid_io.hpp>         // streaming operators etc.
 #include "boost/date_time/posix_time/posix_time.hpp"
+#include <boost/algorithm/string.hpp>
 #include <string>
 #include <zlib.h>
 #include <iomanip>
@@ -12,7 +13,7 @@
 #include "chat_message.hpp"
 
 #define DEBUG_MODE true
-#define CHECKSUM_VALIDATION false
+#define CHECKSUM_VALIDATION true
 
 #define TRUE 1
 #define FALSE 0
@@ -47,8 +48,30 @@ std::string createCheckSum(std::string data)
 unsigned int gen_crc32(std::string data) {
   unsigned int crc;
    crc = crc32(0L, Z_NULL, 0);
-   crc = crc32(crc, (const unsigned char*) data.c_str(), data.length());
+   crc = crc32(crc, (const unsigned char*) data.c_str(), data.length()+1);
    return crc;
+}
+
+std::string build_optional_line(std::vector<std::string> &strs, int start) {
+  std::string m;
+  for(unsigned int j = start; j < strs.size(); j++) {
+    m += (strs[j]);
+    if(j != strs.size()-1) {
+      m += " ";
+    }
+  }
+  return m;
+}
+
+std::string build_line_no_checksum (std::vector<std::string> const &strs, int start) {
+  std::string m;
+  for(unsigned int j = start; j < strs.size(); j++) {
+    m += (strs[j]);
+    if(j != strs.size()-1) {
+      m += ",";
+    }
+  }
+  return m;
 }
 
 /*
@@ -61,24 +84,29 @@ unsigned int gen_crc32(std::string data) {
     FALSE (0) if checksum does not match data
 
 */
-int checkCheckSum(char input[],int length)
+int checkCheckSum(std::string input)
 {
-  //put delim in the statement because of a warning
-  char buffer[length];
-  char data[length]; /*info without checksum*/
-  int offset;
-
   std::string generatedCheckSum;
-  std::strncpy(buffer,input,length);
 
-  std::string originalCheckSum(std::strtok(buffer,","));
+  std::vector<std::string> args;
+  boost::split(args, input, boost::is_any_of(","));
+  for(unsigned int i = 0; i < args.size(); i++) {
+    if(args[i] == "") {
+      args.erase(args.begin()+i);
+    }
+  }
+  std::string originalCheckSum(args[0]);
+  std::string line = "," + build_line_no_checksum(args, 1);
+  unsigned int chcksm = gen_crc32(line);
 
-  offset = std::strlen(buffer) + 1;  /*num chars to move over + 1 term null*/
-  strcpy(data,(buffer+offset));  /*get string time,majorcommand,optional*/
-
-
-  generatedCheckSum = createCheckSum(data);
-
+  std::stringstream sstream;
+  sstream << std::hex << chcksm << "";
+  generatedCheckSum = sstream.str();
+  if(DEBUG_MODE) {
+    std::cout << line << std::endl;
+    std::cout << originalCheckSum << std::endl;
+    std::cout << generatedCheckSum << std::endl;
+  }
   if((originalCheckSum.compare(generatedCheckSum)) == 0)
   {
     return TRUE;
@@ -87,14 +115,13 @@ int checkCheckSum(char input[],int length)
   {
     return FALSE;
   }
-
 }
 
 std::string format_request(std::string command, std::string data) {
-  //time_t tm = time(NULL);
   std::string tm = boost::posix_time::to_iso_string(boost::posix_time::microsec_clock::local_time());
   char cmd[chat_message::max_body_length + 1];
   char req[chat_message::max_body_length + 1];
+
   strcpy(cmd, ",");
   strcat(cmd, tm.c_str());
   strcat(cmd, ",");
@@ -103,11 +130,15 @@ std::string format_request(std::string command, std::string data) {
     strcat(cmd, ",");
     strcat(cmd, data.c_str());
   }
+
   unsigned int chcksm = gen_crc32(std::string(cmd));
+
   std::stringstream sstream;
   sstream << std::hex << chcksm << "";
   std::string result = sstream.str();
+
   strcpy(req, result.c_str());
   strcat(req, cmd);
+
   return std::string(req);
 }
