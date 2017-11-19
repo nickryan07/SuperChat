@@ -4,20 +4,34 @@
 #include <thread>
 #include <iomanip>
 #include <boost/asio.hpp>
-#include "chat_message.hpp"
+#include <boost/algorithm/string.hpp>
+#include <string>
+
+#include <FL/Fl.H>
+#include <FL/Fl_Window.H>
+#include <FL/Fl_Input.H>
+#include <FL/Fl_Output.H>
+#include <FL/Fl_Button.H>
+#include <FL/Fl_Return_Button.H>
+#include <FL/Fl_Text_Display.H>
+#include <FL/Fl_Menu_Bar.H>
+
 #include "util.hpp"
+
 
 using boost::asio::ip::tcp;
 
 typedef std::deque<chat_message> chat_message_queue;
 
+static void cb_recv (std::string S);
+
 class chat_client
 {
 public:
   chat_client(boost::asio::io_service& io_service,
-      tcp::resolver::iterator endpoint_iterator)
+      tcp::resolver::iterator endpoint_iterator, void (*data_recv) (std::string S))
     : io_service_(io_service),
-      socket_(io_service)
+      socket_(io_service), data_recv_ (data_recv)
   {
     do_connect(endpoint_iterator);
   }
@@ -79,6 +93,30 @@ private:
         {
           if (!ec)
           {
+            std::string read_line = std::string(read_msg_.body()).substr(0, read_msg_.body_length());
+            //std::cout << read_line <<" <------\n";
+            if(checkCheckSum(read_line.c_str())) {
+              std::vector<std::string> strs;
+              boost::split(strs, read_line, boost::is_any_of(", "));
+              for(unsigned int i = 0; i < strs.size(); i++) {
+                if(strs[i] == "") {
+                  strs.erase(strs.begin()+i);
+                }
+              }
+              if(strs[2] == "REQTEXT" && strs.size() > 3) {
+                // UUID msg;UUID msg
+                std::vector<std::string> messages;
+                std::string mess = read_line.substr(read_line.find("REQTEXT,")+8, read_line.length());
+                boost::split(messages, mess, boost::is_any_of(";"));
+                std::cout << mess <<" <------\n";
+                for(int i = 0; i < messages.size()-1; i++) {
+                  std::string s = messages[i].substr(messages[i].find(" ")+1, messages[i].length());
+                  std::cout << s <<" <------\n";
+                  data_recv_(s);
+                  data_recv_("\n");
+                }
+              }
+            }
             std::cout.write(read_msg_.body(), read_msg_.body_length());
             std::cout << "\n";
             do_read_header();
@@ -115,9 +153,191 @@ private:
 private:
   boost::asio::io_service& io_service_;
   tcp::socket socket_;
+  void (*data_recv_)(std::string S);
   chat_message read_msg_;
   chat_message_queue write_msgs_;
 };
+chat_client *c = NULL;
+std::thread *t = NULL;
+std::thread *t_polling = NULL;
+
+void enter_nick(Fl_Widget* w, void* p);
+void cancel_nick(Fl_Widget* w, void* p);
+class Change_nick {
+  public:
+    Change_nick() {
+      dialog_b = new Fl_Window(450,50, "Change Nickname");
+      b_name = new Fl_Input(125, 15, 150, 25, "Name: ");
+      b_name->align(FL_ALIGN_LEFT);
+
+      b_add = new Fl_Return_Button(305, 15, 80, 25, "Change");
+      b_add->callback((Fl_Callback *)enter_nick, 0);
+
+      cancel_b = new Fl_Button(385, 15, 60, 25, "Cancel");
+      cancel_b->callback((Fl_Callback *)cancel_nick, 0);
+      dialog_b->end();
+      dialog_b->set_non_modal();
+    }
+    void show() {dialog_b->show();}
+    void hide() {dialog_b->hide();}
+    std::string name() {return b_name->value();}
+    std::string get_input() {
+      return std::string(b_name->value());
+    }
+    void clear() {
+      b_name->value("");
+    }
+  private:
+    Fl_Window *dialog_b;
+    Fl_Input *b_name;
+    Fl_Return_Button *b_add;
+    Fl_Button *cancel_b;
+};
+Change_nick *change_nick = new Change_nick;
+void enter_nick(Fl_Widget* w, void* p) {
+  chat_message msg;
+  char req[chat_message::max_body_length + 1];
+  std::string s = change_nick->get_input();
+  strcpy(req, format_request("NICK", s).c_str());
+  msg.body_length(std::strlen(req));
+  std::memcpy(msg.body(), req, msg.body_length());
+  msg.encode_header();
+  c->write(msg);
+  change_nick->clear();
+  change_nick->hide();
+
+}
+void cancel_nick(Fl_Widget* w, void* p) {
+  change_nick->hide();
+}
+////////////////////////////////////////
+
+void open_nick(Fl_Widget* w, void* p) {
+  change_nick->show();
+}
+// -----------------MAIN WINDOW------------------
+
+bool polling = true;
+/*window (width,height,name*/
+Fl_Window win(832, 539, "UberChat");
+void cancel_command(Fl_Widget* w, void* p) {
+    win.hide();
+    polling = false;
+}
+Fl_Menu_Bar *menubar = new Fl_Menu_Bar(0, 0, 832, 30);
+Fl_Menu_Item menuitems[15] = {
+		{ "&File", 0, 0, 0, FL_SUBMENU },
+ 		{ "&Quit", FL_ALT + 'q', (Fl_Callback *)cancel_command },
+ 		{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    { "&User", 0, 0, 0, FL_SUBMENU },
+ 		{ "&Change Name", 0, (Fl_Callback *)open_nick},// (Fl_Callback *)enter_nick },
+ 		{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+ 		{ "&Chat Room", 0, 0, 0, FL_SUBMENU },
+ 		{ "&Create Room", 0, (Fl_Callback *)cancel_command },
+ 		{ "&Change Room", 0, (Fl_Callback *)cancel_command },
+ 		{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+		{ "&View", 0, 0, 0, FL_SUBMENU },
+ 		{ "&List Users", 0, (Fl_Callback *)cancel_command },
+ 		{ "&List Rooms", 0, (Fl_Callback *)cancel_command },
+ 		{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+	};
+/*
+  (coodinates x, y, width, height, label)
+  0,0 is upper left hand corner
+*/
+Fl_Input input1(85, 500, 600, 20, "Message:");
+
+Fl_Output *currentRoom = new Fl_Output(340,48,200,28,"Current Chatroom");
+
+Fl_Button enter(700, 500, 80,20,"Enter");
+
+
+
+Fl_Text_Buffer *buff = new Fl_Text_Buffer ();
+Fl_Text_Display *disp = new Fl_Text_Display (10,80,800,400);
+// -----------------MAIN WINDOW------------------
+// boost asio instances
+
+static void cb_recv (std::string S)
+{
+  // Note, this is an async callback from the perspective
+  // of Fltk..
+  //
+  // high chance of a lock needed here if certain fltk calls
+  // are made.  (like show() .... )
+  std::string T = S;// + '\0';
+  if (buff)
+  {
+    buff->append ( T.c_str () );
+  }
+  if (disp)
+  {
+    disp->show ();
+  }
+
+  win.show ();
+}
+
+/*static void cb_clear ()
+{
+   if (buff)
+   {
+     buff->remove (0,  buff->length () );
+   }
+   // may need to call show() ?
+}*/
+
+static void cb_quit ( )
+{
+  // this is where we exit to the operating system
+  // any clean up needs to happen here
+  //
+  win.hide();
+  polling = false;
+  if (c)
+  {
+    c->close();
+  }
+  if (t)
+  {
+     t->join();
+  }
+  if(t_polling)
+  {
+    t_polling->join();
+  }
+}
+static void cb_input1 (Fl_Input*, void * userdata)
+{
+  if(std::string(input1.value()) != "") {
+    //&& std::string(input1.value()).find(",") != std::string::npos
+    //&& std::string(input1.value()).find(";") != std::string::npos) {
+    chat_message msg;
+    char req[chat_message::max_body_length + 1];
+    strcpy(req, format_request("SENDTEXT", input1.value()).c_str());
+    msg.body_length(std::strlen(req));
+    std::memcpy(msg.body(), req, msg.body_length());
+    msg.encode_header();
+    c->write(msg);
+    input1.value("");
+  } else {
+    //TODO : Warning message here
+  }
+}
+
+void poll() {
+    while(polling) {
+      chat_message msg;
+      char req[chat_message::max_body_length + 1];
+      strcpy(req, format_request("REQTEXT", "").c_str());
+      msg.body_length(std::strlen(req));
+      std::memcpy(msg.body(), req, msg.body_length());
+      msg.encode_header();
+      c->write(msg);
+      Fl::check();
+      usleep(250000);
+    }
+}
 
 int main(int argc, char* argv[])
 {
@@ -133,36 +353,35 @@ int main(int argc, char* argv[])
 
     tcp::resolver resolver(io_service);
     auto endpoint_iterator = resolver.resolve({ argv[1], argv[2] });
-    chat_client c(io_service, endpoint_iterator);
+    c = new chat_client(io_service, endpoint_iterator, &cb_recv);
 
-    std::thread t([&io_service](){ io_service.run(); });
+    t = new std::thread([&io_service](){ io_service.run(); });
+    t_polling = new std::thread(static_cast<void(*)()>(poll));
+
     chat_message uuid_req;
     char req[chat_message::max_body_length + 1];
     strcpy(req, format_request("REQUUID", "").c_str());
     uuid_req.body_length(std::strlen(req));
     std::memcpy(uuid_req.body(), req, uuid_req.body_length());
     uuid_req.encode_header();
-    c.write(uuid_req);
-    std::string mess;
-    while (std::cin >> mess)//(getline(std::cin, mess))
-    {
-      char line[chat_message::max_body_length + 1] = {0};
-      std::string data;
-      getline(std::cin, data);
-      //char* token = strtok(mess.c_str(), " ");
-      //std::string command(token);
-      //token = strtok(token, NULL);
-      //std::string data(token);
-      std::strcpy(line, format_request(mess, data).c_str());
-      chat_message msg;
-      msg.body_length(std::strlen(line));
-      std::memcpy(msg.body(), line, msg.body_length());
-      msg.encode_header();
-      c.write(msg);
-    }
+    c->write(uuid_req);
+    currentRoom->align(FL_ALIGN_TOP);
+    win.begin ();
+    win.add (input1);
+    input1.callback ((Fl_Callback*)cb_input1,( void *) "Enter next:");
+    input1.when ( FL_WHEN_ENTER_KEY );
+    enter.callback (( Fl_Callback*) cb_input1 );
+    //clear.callback (( Fl_Callback*) cb_clear );
+    win.add (enter);
+    disp->buffer(buff);
+    win.end();
+    win.show();
+    menubar->menu(menuitems);
 
-    c.close();
-    t.join();
+    return Fl::run();
+    c->close();
+    t->join();
+    t_polling->join();
   }
   catch (std::exception& e)
   {

@@ -369,6 +369,7 @@ private:
                 std::string data = room_.update_messages(shared_from_this());
                 std::string s = format_request("REQTEXT", data);
                 std::strcpy(response, s.c_str());
+                //std::cout << s << "!!!!" << std::endl;
                 chat_message res;
                 res.body_length(std::strlen(response));
                 std::memcpy(res.body(), response, res.body_length());

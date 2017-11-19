@@ -3,7 +3,7 @@
 #include <boost/uuid/uuid.hpp>            // uuid class
 #include <boost/uuid/uuid_generators.hpp> // generators
 #include <boost/uuid/uuid_io.hpp>         // streaming operators etc.
-#include "boost/date_time/posix_time/posix_time.hpp"
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/algorithm/string.hpp>
 #include <string>
 #include <zlib.h>
@@ -103,9 +103,9 @@ int checkCheckSum(std::string input)
   sstream << std::hex << chcksm << "";
   generatedCheckSum = sstream.str();
   if(DEBUG_MODE) {
-    std::cout << line << std::endl;
-    std::cout << originalCheckSum << std::endl;
-    std::cout << generatedCheckSum << std::endl;
+    //std::cout << line << std::endl;
+    //std::cout << originalCheckSum << std::endl;
+    //std::cout << generatedCheckSum << std::endl;
   }
   if((originalCheckSum.compare(generatedCheckSum)) == 0)
   {
