@@ -312,11 +312,17 @@ private:
                   store_msg.encode_header();
                   room_.deliver(shared_from_this(), store_msg);
                   char response[chat_message::max_body_length + 1];
-                  std::strcpy(response, m.c_str());
+                  std::strcpy(response, std::to_string(m.length()).c_str());
+                  std::strcat(response, "[");
+                  std::strcat(response, m.c_str());
+                  std::strcat(response, "];");
+                  std::string s = format_request("SENDTEXT", std::string(response));
+                  std::strcpy(response, s.c_str());
                   chat_message res;
                   res.body_length(std::strlen(response));
                   std::memcpy(res.body(), response, res.body_length());
                   res.encode_header();
+                  room_.reply(shared_from_this(), res);
                 }
               } else if(strs[2] == "NAMECHATROOM") {
                 std::string m = build_optional_line(strs, 3);
