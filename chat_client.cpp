@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <boost/asio.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/thread/mutex.hpp>
 #include <string>
 
 #include <FL/Fl.H>
@@ -23,6 +24,8 @@
 using boost::asio::ip::tcp;
 
 typedef std::deque<chat_message> chat_message_queue;
+
+boost::mutex data_lock;
 
 std::string users, rooms;
 
@@ -112,7 +115,7 @@ private:
                 std::string mess = read_line.substr(read_line.find("REQTEXT,")+8, read_line.length());
                 boost::split(messages, mess, boost::is_any_of(";"));
                 //std::cout << mess <<" <------\n";
-                for(int i = 0; i < messages.size()-1; i++) {
+                for(unsigned int i = 0; i < messages.size()-1; i++) {
                   std::string s = messages[i].substr(messages[i].find(" ")+1, messages[i].length());
                   //std::cout << s <<" <------\n";
                   data_recv_(s);
@@ -122,9 +125,13 @@ private:
                 std::string m = build_optional_line(strs, 3);
                 change_room(m);
               } else if(strs[2] == "REQUSERS" && strs.size() > 3) {
+                data_lock.lock();
                 users = read_line.substr(read_line.find("REQUSERS,")+9, read_line.length());
+                data_lock.unlock ();
               } else if(strs[2] == "REQCHATROOMS") {
+                data_lock.lock();
                 rooms = read_line.substr(read_line.find("REQCHATROOMS,")+13, read_line.length());
+                data_lock.unlock();
               }
             }
             std::cout.write(read_msg_.body(), read_msg_.body_length());
@@ -353,7 +360,7 @@ void list_users() {
   std::vector<std::string> messages;
   boost::split(messages, users, boost::is_any_of(",;"));
   std::string output;
-  for(int i = 0; i < messages.size()-1; i+=2) {
+  for(unsigned int i = 0; i < messages.size()-1; i+=2) {
     output += std::to_string(i)+".\t("+messages[i].substr(0, 7)+") Name: "+messages[i+1]+"\n";
   }
   fl_message(output.c_str());
@@ -375,7 +382,7 @@ void list_rooms() {
   std::vector<std::string> messages;
   boost::split(messages, rooms, boost::is_any_of(";"));
   std::string output;
-  for(int i = 0; i < messages.size()-1; i++) {
+  for(unsigned int i = 0; i < messages.size()-1; i++) {
     output += std::to_string(i)+".\t"+messages[i]+"\n";
   }
   fl_message(output.c_str());
@@ -387,26 +394,26 @@ void list_rooms() {
 bool polling = true;
 /*window (width,height,name*/
 Fl_Window win(832, 539, "UberChat");
-void cancel_command(Fl_Widget* w, void* p) {
+void cancel_command() {
     win.hide();
     polling = false;
 }
 Fl_Menu_Bar *menubar = new Fl_Menu_Bar(0, 0, 832, 30);
 Fl_Menu_Item menuitems[15] = {
-		{ "&File", 0, 0, 0, FL_SUBMENU },
- 		{ "&Quit", FL_ALT + 'q', (Fl_Callback *)cancel_command },
+		{ "&File", 0, 0, 0, FL_SUBMENU, 0, 0, 0, 0},
+ 		{ "&Quit", FL_ALT + 'q', (Fl_Callback *)cancel_command, 0, 0, 0, 0, 0, 0},
  		{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-    { "&User", 0, 0, 0, FL_SUBMENU },
- 		{ "&Change Name", 0, (Fl_Callback *)open_nick},// (Fl_Callback *)enter_nick },
+    { "&User", 0, 0, 0, FL_SUBMENU, 0, 0, 0, 0 },
+ 		{ "&Change Name", 0, (Fl_Callback *)open_nick, 0, 0, 0, 0, 0, 0},// (Fl_Callback *)enter_nick },
  		{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },
- 		{ "&Chat Room", 0, 0, 0, FL_SUBMENU },
- 		{ "&Create Room", 0, (Fl_Callback *)open_newroom },
- 		{ "&Change Room", 0, (Fl_Callback *)open_joinroom },
+ 		{ "&Chat Room", 0, 0, 0, FL_SUBMENU, 0, 0, 0, 0},
+ 		{ "&Create Room", 0, (Fl_Callback *)open_newroom, 0, 0, 0, 0, 0, 0},
+ 		{ "&Change Room", 0, (Fl_Callback *)open_joinroom, 0, 0, 0, 0, 0, 0},
  		{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-		{ "&View", 0, 0, 0, FL_SUBMENU },
- 		{ "&List Users", 0, (Fl_Callback *)list_users },
- 		{ "&List Rooms", 0, (Fl_Callback *)list_rooms },
- 		{ 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+		{ "&View", 0, 0, 0, FL_SUBMENU, 0, 0, 0, 0},
+ 		{ "&List Users", 0, (Fl_Callback *)list_users, 0, 0, 0, 0, 0, 0},
+ 		{ "&List Rooms", 0, (Fl_Callback *)list_rooms, 0, 0, 0, 0, 0, 0},
+ 		{ 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 	};
 /*
   (coodinates x, y, width, height, label)
@@ -446,7 +453,7 @@ static void cb_recv (std::string S)
   win.show ();
 }
 
-static void cb_quit ( )
+/*static void cb_quit ( )
 {
   // this is where we exit to the operating system
   // any clean up needs to happen here
@@ -465,8 +472,8 @@ static void cb_quit ( )
   {
     t_polling->join();
   }
-}
-static void cb_input1 (Fl_Input*, void * userdata)
+}*/
+static void cb_msg (Fl_Input*)
 {
   if(std::string(input1.value()) != ""
     && std::string(input1.value()).find(",") == std::string::npos
@@ -530,9 +537,9 @@ int main(int argc, char* argv[])
     currentRoom->align(FL_ALIGN_LEFT);
     win.begin ();
     win.add (input1);
-    input1.callback ((Fl_Callback*)cb_input1,( void *) "Enter next:");
+    input1.callback ((Fl_Callback*)cb_msg);
     input1.when ( FL_WHEN_ENTER_KEY );
-    enter.callback (( Fl_Callback*) cb_input1 );
+    enter.callback (( Fl_Callback*) cb_msg );
     //clear.callback (( Fl_Callback*) cb_clear );
     win.add (enter);
     disp->buffer(buff);
