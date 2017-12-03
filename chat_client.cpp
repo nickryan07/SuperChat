@@ -23,13 +23,22 @@
 
 using boost::asio::ip::tcp;
 
+// the queue of messages to be sent by the client
 typedef std::deque<chat_message> chat_message_queue;
 
+// a lock to ensure thread safety
 boost::mutex data_lock;
 
+// global strings to store the lists of chat users and chat rooms that is
+// received by the server
 std::string users, rooms;
 
+// declaring some fltk callbacks so that they can be used before being defined
+// the cb_recv function has a string parameter [S] and is called when a message
+// is received by the server so that it can be appeneded to the GUI
 static void cb_recv (std::string S);
+// the change_room function takes a string [S] as a parameter and changes the chat
+// room that the user is currently in.
 static void change_room (std::string S);
 
 class chat_client
@@ -100,6 +109,7 @@ private:
         {
           if (!ec)
           {
+            //
             std::string read_line = std::string(read_msg_.body()).substr(0, read_msg_.body_length());
             //std::cout << read_line <<" <------\n";
             if(checkCheckSum(read_line.c_str())) {
@@ -174,14 +184,28 @@ private:
   chat_message read_msg_;
   chat_message_queue write_msgs_;
 };
+// pointer to a chat_client [c]
 chat_client *c = NULL;
+//pointer to a new thread [t]
 std::thread *t = NULL;
+//pointer to the thread that will be used for polling [t_polling]
 std::thread *t_polling = NULL;
 // -------------------NICKNAMES------------------
+// the enter_nick function opens the nick name changing window when called
 void enter_nick();
+// the cancel_nick function closes the nick name window
 void cancel_nick();
+
+/*
+  The Change_nick class constructs a fltk object that allows the user to enter
+  a string and press a button to change their nickname.
+*/
 class Change_nick {
   public:
+    /*
+      The Change_nick constructor creates a window with an input box and 2
+      buttons: a change button and a cancel button.
+    */
     Change_nick() {
       dialog_b = new Fl_Window(450,50, "Change Nickname");
       b_name = new Fl_Input(125, 15, 150, 25, "Name: ");
@@ -195,21 +219,40 @@ class Change_nick {
       dialog_b->end();
       dialog_b->set_non_modal();
     }
+
+    // the show function shows the nick window
     void show() {dialog_b->show();}
+
+    // hide function hides the nick window
     void hide() {dialog_b->hide();}
+
+    // the name function returns the value in the text box
     std::string name() {return b_name->value();}
+
+    // the get_input function returns a string [b_name->value()] that is the value
+    // the user entered into the text box before pressing the change button
     std::string get_input() {
       return std::string(b_name->value());
     }
+
+    // the clear function sets the text box to empty
     void clear() {
       b_name->value("");
     }
   private:
+    // dialog_b is a pointer the a Fl_Window object
     Fl_Window *dialog_b;
+
+    // b_name is a pointer to a Fl_Input box
     Fl_Input *b_name;
+
+    // b_add is a pointer to a fl Return button [the change button]
     Fl_Return_Button *b_add;
+
+    // cancel_b is a pointer to a fl button [the cancel button]
     Fl_Button *cancel_b;
 };
+// creating an instance [change_nick] of the nick name dialog box 
 Change_nick *change_nick = new Change_nick;
 void enter_nick() {
   chat_message msg;
