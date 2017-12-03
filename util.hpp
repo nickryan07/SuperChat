@@ -150,14 +150,6 @@ std::string format_request(std::string command, std::string data) {
   char cmd[chat_message::max_body_length + 1];
   char req[chat_message::max_body_length + 1];
 
-  /*strcpy(cmd, ",");
-  strcat(cmd, tm.c_str());
-  strcat(cmd, ",");
-  strcat(cmd, command.c_str());
-  if(data != "") {
-    strcat(cmd, ",");
-    strcat(cmd, data.c_str());
-  }*/
   std::string build = "," + tm + "," + command;
   if(data != "") {
     build += "," + data;
@@ -173,4 +165,22 @@ std::string format_request(std::string command, std::string data) {
   strcat(req, cmd);
 
   return std::string(req);
+}
+
+/*
+  The format_request_nochecksum function takes a string [command] and another string [data]
+  as parameters and builds a message to be sent by either the server or the client
+  in the format specified by the requirements document.
+  Returns a string [req]
+*/
+std::string format_request_nochecksum(std::string tm, std::string command, std::string data) {
+  char cmd[chat_message::max_body_length + 1];
+
+  std::string build = "," + tm + "," + command;
+  if(data != "") {
+    build += "," + data;
+  }
+  strcpy(cmd, build.c_str());
+
+  return std::string(cmd);
 }
