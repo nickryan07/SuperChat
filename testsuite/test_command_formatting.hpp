@@ -3,7 +3,7 @@
 #include <assert.h>
 
 
-#include "util.hpp"
+#include "../util.hpp"
 
 void test_formatting()
 {
