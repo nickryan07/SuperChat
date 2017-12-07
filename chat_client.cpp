@@ -41,6 +41,10 @@ static void cb_recv (std::string S);
 // room that the user is currently in.
 static void change_room (std::string S);
 
+/*
+  Chat client is where message encoding and decoding will occur. It will
+  be where messages received from the server are processed and handled.
+*/
 class chat_client
 {
 public:
@@ -252,7 +256,7 @@ class Change_nick {
     // cancel_b is a pointer to a fl button [the cancel button]
     Fl_Button *cancel_b;
 };
-// creating an instance [change_nick] of the nick name dialog box 
+// creating an instance [change_nick] of the nick name dialog box
 Change_nick *change_nick = new Change_nick;
 void enter_nick() {
   chat_message msg;
@@ -496,26 +500,6 @@ static void cb_recv (std::string S)
   win.show ();
 }
 
-/*static void cb_quit ( )
-{
-  // this is where we exit to the operating system
-  // any clean up needs to happen here
-  //
-  win.hide();
-  polling = false;
-  if (c)
-  {
-    c->close();
-  }
-  if (t)
-  {
-     t->join();
-  }
-  if(t_polling)
-  {
-    t_polling->join();
-  }
-}*/
 static void cb_msg (Fl_Input*)
 {
   if(std::string(input1.value()) != ""
@@ -535,6 +519,7 @@ static void cb_msg (Fl_Input*)
 }
 
 void poll() {
+  usleep(1000000);
     while(polling) {
       chat_message msg;
       char req[chat_message::max_body_length + 1];
